@@ -5,15 +5,15 @@ import (
 	"net/http"
 )
 
-// DetectContentType wraps http.DetectContentType
-func DetectContentType(data []byte) string {
+// DetectContentType wraps http.DetectContentType and offers a fallback for PDF detection.
+func DetectContentType(startData []byte, endData []byte) string {
 
 	// Detect UTF8 BOM
-	if len(data) > 3 && bytes.Equal(data[0:3], []byte{0xEF, 0xBB, 0xBF}) {
-		data = data[3:]
+	if len(startData) > 3 && bytes.Equal(startData[0:3], []byte{0xEF, 0xBB, 0xBF}) {
+		startData = startData[3:]
 	}
 
-	contentType := http.DetectContentType(data)
+	contentType := http.DetectContentType(startData)
 
 	if isNonFallback(contentType) {
 		return contentType
@@ -21,23 +21,27 @@ func DetectContentType(data []byte) string {
 
 	// Get the index of the first non-whitespace byte in data.
 	firstNonWS := 0
-	for ; firstNonWS < len(data) && isWS(data[firstNonWS]); firstNonWS++ {
+	for ; firstNonWS < len(startData) && isWS(startData[firstNonWS]); firstNonWS++ {
 	}
 
 	// Try to detect the Content-Type using a signature. Some PDF generators add their own bytes prior to the signature bytes.
 	// This is accounted for repeatedly sniffing the bytes with an increasing starting offset
 	maxOffset := firstNonWS + 10
 
-	if maxOffset >= len(data) {
+	if maxOffset >= len(startData) {
 		return contentType
 	}
 
 	for offset := firstNonWS; offset <= maxOffset; offset++ {
 		// Try to detect a new Content-Type with an offset
-		newContentType := http.DetectContentType(data[offset:])
+		newContentType := http.DetectContentType(startData[offset:])
 		if isNonFallback(newContentType) {
 			return newContentType
 		}
+	}
+
+	if endData != nil && bytes.Contains(endData, []byte("%%EOF")) {
+		return "application/pdf"
 	}
 
 	return contentType

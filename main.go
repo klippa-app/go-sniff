@@ -7,6 +7,6 @@ import (
 )
 
 func main() {
-	cT := sniff.DetectContentType([]byte("<html><head>"))
+	cT := sniff.DetectContentType([]byte("<html><head>"), nil)
 	log.Println(cT)
 }
