@@ -6,7 +6,12 @@ import (
 )
 
 // DetectContentType wraps http.DetectContentType and offers a fallback for PDF detection.
-func DetectContentType(startData []byte, endData []byte) string {
+func DetectContentType(assumedContentType string, startData, endData []byte) string {
+	// It's possible there is garbage around a PDF file, which makes it still
+	// viewable as PDF, but the sniffer would return a different contentType.
+	if (isPDFContentType(assumedContentType) || isFallbackContentType(assumedContentType)) && endData != nil && bytes.Contains(endData, []byte("%%EOF")) {
+		return "application/pdf"
+	}
 
 	// Detect UTF8 BOM
 	if len(startData) > 3 && bytes.Equal(startData[0:3], []byte{0xEF, 0xBB, 0xBF}) {
@@ -15,7 +20,7 @@ func DetectContentType(startData []byte, endData []byte) string {
 
 	contentType := http.DetectContentType(startData)
 
-	if isNonFallback(contentType) {
+	if !isFallbackContentType(contentType) {
 		return contentType
 	}
 
@@ -35,7 +40,7 @@ func DetectContentType(startData []byte, endData []byte) string {
 	for offset := firstNonWS; offset <= maxOffset; offset++ {
 		// Try to detect a new Content-Type with an offset
 		newContentType := http.DetectContentType(startData[offset:])
-		if isNonFallback(newContentType) {
+		if !isFallbackContentType(newContentType) {
 			return newContentType
 		}
 	}
@@ -55,8 +60,12 @@ func isWS(b byte) bool {
 	return false
 }
 
-// isNonFallback detects fallback returned by http.DetectContentType
-func isNonFallback(contentType string) bool {
-	return contentType != "application/octet-stream" && contentType != "text/plain; charset=utf-8"
+// isPDFContentType detects whether a content type is one of the valid pdf content types
+func isPDFContentType(contentType string) bool {
+	return contentType == "application/x-pdf" || contentType == "application/pdf" || contentType == "x-application/apple-pdf"
 }
 
+// isFallbackContentType detects fallback returned by http.DetectContentType
+func isFallbackContentType(contentType string) bool {
+	return contentType == "application/octet-stream" || contentType == "text/plain; charset=utf-8"
+}
